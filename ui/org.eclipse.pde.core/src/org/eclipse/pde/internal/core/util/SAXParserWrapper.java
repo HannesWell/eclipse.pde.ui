@@ -33,8 +33,9 @@ public class SAXParserWrapper {
 	protected SAXParser fParser;
 	protected boolean isdisposed;
 
+
 	/**
-	 *
+	 * asdasd
 	 */
 	public SAXParserWrapper() throws ParserConfigurationException, SAXException, FactoryConfigurationError {
 		fParser = PDEXMLHelper.Instance().getDefaultSAXParser();
