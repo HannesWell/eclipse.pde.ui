@@ -18,6 +18,7 @@ package org.eclipse.pde.internal.genericeditor.target.extension.autocomplete.pro
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import org.eclipse.equinox.p2.metadata.IVersionedId;
@@ -42,6 +43,19 @@ import org.eclipse.pde.internal.genericeditor.target.extension.model.xml.Parser;
  * where ^ is autocomplete call.
  */
 public class AttributeValueCompletionProcessor extends DelegateProcessor {
+
+	private static final Map<String, List<String>> IU_LOCATION_ATTRIBTUES_VALUES = Map.of( //
+			// TODO: complete and check in detail!
+			ITargetConstants.LOCATION_INCLUDE_CONFIG_PHASE_ATTR,
+			List.of(Boolean.TRUE.toString(), Boolean.TRUE.toString()), ITargetConstants.LOCATION_INCLUDE_MODE_ATTR,
+			List.of("planner", "slicer"), ITargetConstants.LOCATION_INCLUDE_PLATFORMS_ATTR,
+			List.of(Boolean.TRUE.toString(), Boolean.TRUE.toString()), ITargetConstants.LOCATION_INCLUDE_SOURCE_ATTR,
+			List.of(Boolean.TRUE.toString(), Boolean.TRUE.toString()),
+
+			ITargetConstants.LOCATION_FOLLOW_REPOSITORY_REFERENCES_ATTR,
+			List.of(Boolean.TRUE.toString(), Boolean.TRUE.toString())
+	// TODO: use this?!
+	);
 
 	private final String searchTerm;
 	private final String acKey;
@@ -69,8 +83,9 @@ public class AttributeValueCompletionProcessor extends DelegateProcessor {
 				break;
 			}
 		}
-		if (locationNode == null)
+		if (locationNode == null) {
 			return new ICompletionProposal[] {};
+		}
 		UnitNode node = null;
 		for (Node u : locationNode.getChildNodesByTag(ITargetConstants.UNIT_TAG)) {
 			if ((offset >= u.getOffsetStart()) && (offset < u.getOffsetEnd())) {
@@ -78,31 +93,21 @@ public class AttributeValueCompletionProcessor extends DelegateProcessor {
 				break;
 			}
 		}
-		if (ITargetConstants.UNIT_ID_ATTR.equalsIgnoreCase(acKey)) {
-			if (node != null) {
-				if (!(node.getParentNode() instanceof LocationNode location)) {
+		if (node != null) {
+			if (ITargetConstants.UNIT_ID_ATTR.equalsIgnoreCase(acKey)) {
+				Optional<Map<String, List<IVersionedId>>> units = fetchUnits(node);
+				if (units.isEmpty()) {
 					return getErrorCompletion();
 				}
-				List<String> repoLocations = location.getRepositoryLocations();
-				if (repoLocations.isEmpty()) {
-					return getErrorCompletion();
-				}
-				Map<String, List<IVersionedId>> units = RepositoryCache.fetchP2UnitsFromRepos(repoLocations);
-				return toProposals(units.keySet().stream());
+				return toProposals(units.get().keySet().stream());
 			}
-		}
 
-		if (ITargetConstants.UNIT_VERSION_ATTR.equalsIgnoreCase(acKey)) {
-			if (node != null) {
-				if (!(node.getParentNode() instanceof LocationNode location)) {
+			if (ITargetConstants.UNIT_VERSION_ATTR.equalsIgnoreCase(acKey)) {
+				Optional<Map<String, List<IVersionedId>>> units = fetchUnits(node);
+				if (units.isEmpty()) {
 					return getErrorCompletion();
 				}
-				List<String> repoLocations = location.getRepositoryLocations();
-				if (repoLocations.isEmpty()) {
-					return getErrorCompletion();
-				}
-				Map<String, List<IVersionedId>> units = RepositoryCache.fetchP2UnitsFromRepos(repoLocations);
-				List<IVersionedId> versions = units.get(node.getId());
+				List<IVersionedId> versions = units.get().get(node.getId());
 				if (versions != null) {
 					Stream<String> availableVersions = Stream.concat(
 							versions.stream().map(unit -> unit.getVersion().toString()),
@@ -110,14 +115,33 @@ public class AttributeValueCompletionProcessor extends DelegateProcessor {
 					return toProposals(availableVersions.distinct());
 				}
 			}
+
+			if (ITargetConstants.REPOSITORY_LOCATION_ATTR.equalsIgnoreCase(acKey)) {
+				// FIXME: use the entire value as search?
+
+				// TODO: we are not in a Unit-node but in a repository node!
+				if (node != null) {
+					List<URI> children = RepositoryCache.fetchChildrenOfRepo(searchTerm);
+					return toProposals(children.stream().map(URI::toString));
+				}
+			}
+		} else {
+			return getErrorCompletion();
 		}
 
-		if (ITargetConstants.REPOSITORY_LOCATION_ATTR.equalsIgnoreCase(acKey)) {
-			List<URI> children = RepositoryCache.fetchChildrenOfRepo(searchTerm);
-			return toProposals(children.stream().map(URI::toString));
-		}
 
 		return new ICompletionProposal[] {};
+	}
+
+	private static Optional<Map<String, List<IVersionedId>>> fetchUnits(UnitNode node) {
+		if (!(node.getParentNode() instanceof LocationNode location)) {
+			return Optional.empty();
+		}
+		List<String> repoLocations = location.getRepositoryLocations();
+		if (repoLocations.isEmpty()) {
+			return Optional.empty();
+		}
+		return Optional.of(RepositoryCache.fetchP2UnitsFromRepos(repoLocations));
 	}
 
 	private ICompletionProposal[] toProposals(Stream<String> values) {
