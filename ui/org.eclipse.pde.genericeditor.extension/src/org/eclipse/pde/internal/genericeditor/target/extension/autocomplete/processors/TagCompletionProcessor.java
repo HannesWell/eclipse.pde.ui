@@ -31,6 +31,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.eclipse.jface.text.contentassist.ICompletionProposal;
 import org.eclipse.jface.viewers.StyledString;
@@ -40,6 +42,7 @@ import org.eclipse.pde.internal.genericeditor.target.extension.model.DependencyN
 import org.eclipse.pde.internal.genericeditor.target.extension.model.ITargetConstants;
 import org.eclipse.pde.internal.genericeditor.target.extension.model.LocationNode;
 import org.eclipse.pde.internal.genericeditor.target.extension.model.Node;
+import org.eclipse.pde.internal.genericeditor.target.extension.model.RepositoryNode;
 import org.eclipse.pde.internal.genericeditor.target.extension.model.UnitNode;
 import org.eclipse.pde.internal.genericeditor.target.extension.model.xml.Parser;
 
@@ -72,68 +75,61 @@ public class TagCompletionProcessor extends DelegateProcessor {
 		tagChildren.put(DEPENDENCY_TAG, new String[] { ITargetConstants.GROUP_ID_TAG, ITargetConstants.ARTIFACT_ID_TAG,
 				ITargetConstants.VERSION_TAG, ITargetConstants.TYPE_TAG });
 
+		tagChildren.put(ITargetConstants.OS_TAG, new String[] {});
+		tagChildren.put(ITargetConstants.WS_TAG, new String[] {});
+		tagChildren.put(ITargetConstants.ARCH_TAG, new String[] {});
+		tagChildren.put(ITargetConstants.NL_TAG, new String[] {});
+
 		allowedDuplicatesTags.add(LocationNode.class);
 		allowedDuplicatesTags.add(UnitNode.class);
 		allowedDuplicatesTags.add(DependencyNode.class);
+		allowedDuplicatesTags.add(RepositoryNode.class);
 	}
 
 	private final String searchTerm;
 	private final int offset;
+	private final Node activeNode;
+	private final String prefix;
 
-	public TagCompletionProcessor(String searchTerm, String acKey, int offset) {
+	public TagCompletionProcessor(String searchTerm, Node activeNode, int offset, String prefix) {
 		this.searchTerm = searchTerm;
+		this.activeNode = activeNode;
 		this.offset = offset;
+		this.prefix = prefix;
 	}
 
 	@Override
 	public ICompletionProposal[] getCompletionProposals() {
 		List<ICompletionProposal> proposals = new ArrayList<>();
 		String[] tags = null;
-		Parser parser = Parser.getDefault();
-		Node node = parser.getRootNode();
-		List<Node> children = new ArrayList<>();
-		if (node == null) {
+
+		List<Node> children = List.of();
+		if (activeNode == null) {
 			tags = tagChildren.get(null);
-		} else if (!isOffsetWithinNode(node)) {
-			children.add(node);
-			tags = tagChildren.get(null);
-		} else {
-			children = node.getChildNodes();
-			while (children != null && isOffsetWithinNode(node)) {
-				Node selectedChildNode = null;
-				for (Node child : children) {
-					if (isOffsetWithinNode(child)) {
-						selectedChildNode = child;
-						children = selectedChildNode.getChildNodes();
-						break;
-					}
-				}
-				if (selectedChildNode == null) {
-					break;
-				}
-				node = selectedChildNode;
-				if (!tagChildren.containsKey(selectedChildNode.getNodeTag())) {
-					break;
-				}
+			Node rootNode = Parser.getDefault().getRootNode();
+			if (rootNode != null) {
+				children = List.of(rootNode);
 			}
-			if (tagChildren.containsKey(node.getNodeTag())) {
-				tags = tagChildren.get(node.getNodeTag());
-			} else if (node.getParentNode() != null && tagChildren.containsKey(node.getParentNode().getNodeTag())) {
+		} else {
+			Node node = activeNode; // the container of the new element
+			children = node.getChildNodes();
+			while (!tagChildren.containsKey(node.getNodeTag())) {
+				children = node.getChildNodes();
+				node = node.getParentNode();
+			}
+			tags = tagChildren.get(node.getNodeTag());
+			if (tags == null && node.getParentNode() != null) {
 				tags = tagChildren.get(node.getParentNode().getNodeTag());
 				children = node.getParentNode().getChildNodes();
-			} else {
+			}
+			if (tags == null) {
 				tags = tagChildren.get(null);
+				children = node.getChildNodes();
 			}
 		}
 
-		List<String> siblingTags = new ArrayList<>();
-		if (children != null) {
-			for (Node child : children) {
-				if (!allowedDuplicatesTags.contains(child.getClass())) {
-					siblingTags.add(child.getNodeTag());
-				}
-			}
-		}
+		Set<String> siblingTags = children.stream().filter(child -> !allowedDuplicatesTags.contains(child.getClass()))
+				.map(Node::getNodeTag).collect(Collectors.toSet());
 
 		Arrays.sort(tags);
 
@@ -143,7 +139,7 @@ public class TagCompletionProcessor extends DelegateProcessor {
 				continue;
 			}
 			proposals.add(new TagCompletionProposal(tags[i], offset - searchTerm.length(), searchTerm.length(),
-					displayString));
+					displayString, prefix));
 		}
 		return proposals.toArray(new ICompletionProposal[proposals.size()]);
 	}

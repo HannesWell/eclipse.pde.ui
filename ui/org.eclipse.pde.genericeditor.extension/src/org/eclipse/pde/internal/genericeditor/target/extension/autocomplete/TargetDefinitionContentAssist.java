@@ -17,11 +17,15 @@
 package org.eclipse.pde.internal.genericeditor.target.extension.autocomplete;
 
 import java.util.Arrays;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.List;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import javax.xml.stream.XMLStreamException;
 
+import org.eclipse.core.runtime.ILog;
 import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
@@ -35,9 +39,12 @@ import org.eclipse.jface.viewers.StyledString;
 import org.eclipse.jface.viewers.StyledString.Styler;
 import org.eclipse.pde.internal.genericeditor.target.extension.autocomplete.processors.AttributeNameCompletionProcessor;
 import org.eclipse.pde.internal.genericeditor.target.extension.autocomplete.processors.AttributeValueCompletionProcessor;
+import org.eclipse.pde.internal.genericeditor.target.extension.autocomplete.processors.DelegateProcessor;
 import org.eclipse.pde.internal.genericeditor.target.extension.autocomplete.processors.TagCompletionProcessor;
 import org.eclipse.pde.internal.genericeditor.target.extension.autocomplete.processors.TagValueCompletionProcessor;
+import org.eclipse.pde.internal.genericeditor.target.extension.model.Node;
 import org.eclipse.pde.internal.genericeditor.target.extension.model.xml.Parser;
+import org.eclipse.pde.internal.genericeditor.target.extension.model.xml.XMLElement.Attribute;
 
 /**
  *
@@ -46,139 +53,107 @@ import org.eclipse.pde.internal.genericeditor.target.extension.model.xml.Parser;
  */
 public class TargetDefinitionContentAssist implements IContentAssistProcessor {
 
-	private static final String PREVIOUS_TAGS_MATCH = "(\\s*<(.|\\n)*>\\s*)*"; //$NON-NLS-1$
-	private static final String ATTRIBUTE_NAME_SEARCH_TERM_MATCH = PREVIOUS_TAGS_MATCH
-			.concat("\\s*<\\s*\\w*(\\s*\\w*\\s*=\\s*\".*?\")*\\s+(?<searchTerm>\\w*)"); //$NON-NLS-1$
-	private static final String TAG_SEARCH_TERM_MATCH = PREVIOUS_TAGS_MATCH.concat("\\s*<\\s*(?<searchTerm>\\w*)"); //$NON-NLS-1$
-	private static final String ATTRIBUTE_VALUE_MATCH_REGEXP = PREVIOUS_TAGS_MATCH
-			.concat("\\s*<\\s*\\w*(\\s+\\w+\\s*=\\s*\"(.|\\n)*?\")*\\s+\\w+\\s*=\\s*\"[^\"]*"); //$NON-NLS-1$
-	private static final String ATTRIBUTE_VALUE_ACKEY_MATCH = PREVIOUS_TAGS_MATCH
-			.concat("\\s*<\\s*\\w*(\\s+\\w+\\s*=\\s*\".*?\")*\\s+(?<ackey>\\w+)\\s*=\\s*\"[^\"]*"); //$NON-NLS-1$
-	private static final String ATTRIBUTE_VALUE_SEARCH_TERM_MATCH = PREVIOUS_TAGS_MATCH
-			.concat("\\s*<\\s*\\w*(\\s+\\w+\\s*=\\s*\".*?\")*\\s+\\w+\\s*=\\s*\"(?<searchTerm>[^\"]*)"); //$NON-NLS-1$
-	private static final String ATTRIBUTE_NAME_MATCH_REGEXP = PREVIOUS_TAGS_MATCH
-			.concat("\\s*<\\s*\\w*(\\s*\\w+\\s*=\\s*\"(.|\\n)*?\")*\\s+\\w*"); //$NON-NLS-1$
-	private static final String ATTRIBUTE_NAME_ACKEY_MATCH = PREVIOUS_TAGS_MATCH
-			.concat("\\s*<\\s*(?<ackey>\\w*)(\\s*\\w+\\s*=\\s*\".*?\")*\\s+\\w*"); //$NON-NLS-1$
-	private static final String TAG_MATCH_REGEXP = PREVIOUS_TAGS_MATCH.concat("\\s*<\\s*\\w*"); //$NON-NLS-1$
-	private static final String TAG_VALUE_MATCH_REGEXP = PREVIOUS_TAGS_MATCH.concat("\\s*<\\s*\\w+[^<]*>\\s*\\w*"); //$NON-NLS-1$
-	private static final String TAG_VALUE_SEARCH_TERM_MATCH = PREVIOUS_TAGS_MATCH.concat("\\s*(?<searchTerm>\\w*)"); //$NON-NLS-1$
-	private static final String TAG_VALUE_ACKEY_MATCH = PREVIOUS_TAGS_MATCH.concat("\\s*<(?<ackey>\\w*).*"); //$NON-NLS-1$
-
-	private static final int COMPLETION_TYPE_TAG = 0;
-	private static final int COMPLETION_TYPE_ATTRIBUTE_NAME = 1;
-	private static final int COMPLETION_TYPE_ATTRIBUTE_VALUE = 2;
-	private static final int COMPLETION_TYPE_HEADER = 4;
-	private static final int COMPLETION_TYPE_TAG_VALUE = 5;
-	private static final int COMPLETION_TYPE_UNKNOWN = 6;
-
-	private static final Pattern TAG_SEARCH_TERM_PATTERN = Pattern.compile(TAG_SEARCH_TERM_MATCH, Pattern.DOTALL);
-	private static final Pattern ATT_NAME_SEARCH_TERM_PATTERN = Pattern.compile(ATTRIBUTE_NAME_SEARCH_TERM_MATCH,
-			Pattern.DOTALL);
-	private static final Pattern ATTR_NAME_ACKEY_MATCH = Pattern.compile(ATTRIBUTE_NAME_ACKEY_MATCH, Pattern.DOTALL);
-	private static final Pattern ATTR_VALUE_SEARCH_TERM_PATTERN = Pattern.compile(ATTRIBUTE_VALUE_SEARCH_TERM_MATCH,
-			Pattern.DOTALL);
-	private static final Pattern ATTR_VALUE_ACKEY_PATTERN = Pattern.compile(ATTRIBUTE_VALUE_ACKEY_MATCH,
-			Pattern.DOTALL);
-	private static final Pattern TAG_VALUE_SEARCH_TERM_PATTERN = Pattern.compile(TAG_VALUE_SEARCH_TERM_MATCH,
-			Pattern.DOTALL);
-	private static final Pattern TAG_VALUE_ACKEY_PATTERN = Pattern.compile(TAG_VALUE_ACKEY_MATCH, Pattern.DOTALL);
-
-	private String searchTerm = ""; //$NON-NLS-1$
-	private String acKey;
+	private static final char ATTRIBUTE_NAME_VALUE_SEPARATOR = '=';
 
 	@Override
 	public ICompletionProposal[] computeCompletionProposals(ITextViewer viewer, int offset) {
 		IDocument document = viewer.getDocument();
 		String text = document.get();
+		Parser parser = Parser.getDefault();
 		try {
-			Parser.getDefault().parse(document);
+			parser.parse(document);
 		} catch (XMLStreamException e) {
 			// TODO handle parsing errors
 		}
-
-		int completionType = detectCompletionType(document, text, offset);
-		if (completionType == COMPLETION_TYPE_UNKNOWN) {
-			return new ICompletionProposal[0];
-		}
-
-		if (completionType == COMPLETION_TYPE_TAG) {
-			TagCompletionProcessor processor = new TagCompletionProcessor(searchTerm, acKey, offset);
-			return processor.getCompletionProposals();
-		}
-
-		if (completionType == COMPLETION_TYPE_ATTRIBUTE_NAME) {
-			AttributeNameCompletionProcessor processor = new AttributeNameCompletionProcessor(searchTerm, acKey, offset,
-					text);
-			return processor.getCompletionProposals();
-		}
-
-		if (completionType == COMPLETION_TYPE_ATTRIBUTE_VALUE) {
-			AttributeValueCompletionProcessor processor = new AttributeValueCompletionProcessor(searchTerm, acKey,
-					offset);
-			return processor.getCompletionProposals();
-		}
-
-		if (completionType == COMPLETION_TYPE_TAG_VALUE) {
-			TagValueCompletionProcessor processor = new TagValueCompletionProcessor(searchTerm, acKey, offset);
-			return processor.getCompletionProposals();
-		}
-
-		return new ICompletionProposal[0];
+		return detectCompletionType(document, text, offset, parser);
 	}
 
-	private int detectCompletionType(IDocument doc, String text, int offset) {
-
+	private ICompletionProposal[] detectCompletionType(IDocument doc, String text, int offset, Parser parser) {
 		if (offset == 0) {
-			return COMPLETION_TYPE_HEADER;
+			return new ICompletionProposal[0];
 		}
-
 		try {
 			doc.getLineInformationOfOffset(offset);
 		} catch (BadLocationException e) {
-			e.printStackTrace();
-			return COMPLETION_TYPE_UNKNOWN;
+			ILog.get().error("Invalid offset: " + offset, e);
+			return new ICompletionProposal[0];
 		}
-		int indexOfLastTagStart = text.lastIndexOf('<', offset - 1);
-		String tagText = text.substring(Math.max(0, indexOfLastTagStart), offset);
-		if (tagText.matches(TAG_MATCH_REGEXP)) {
-			Matcher matcher = TAG_SEARCH_TERM_PATTERN.matcher(tagText);
-			matcher.matches();
-			searchTerm = matcher.group("searchTerm"); //$NON-NLS-1$
-			return COMPLETION_TYPE_TAG;
-		}
+		Node rootNode = parser.getRootNode();
+		Node activeNode = findNodeAt(rootNode, offset);
 
-		if (tagText.matches(ATTRIBUTE_NAME_MATCH_REGEXP)) {
-			Matcher matcher = ATT_NAME_SEARCH_TERM_PATTERN.matcher(tagText);
-			matcher.matches();
-			searchTerm = matcher.group("searchTerm"); //$NON-NLS-1$
-			matcher = ATTR_NAME_ACKEY_MATCH.matcher(tagText);
-			matcher.matches();
-			acKey = matcher.group("ackey"); //$NON-NLS-1$
-			return COMPLETION_TYPE_ATTRIBUTE_NAME;
-		}
+		if (activeNode != null) {
+			if (activeNode.getOffsetStartTagEnd() <= offset && offset <= activeNode.getOffsetEndTagStart()) {
+				// Cursor is within the active node
+				// -> either a new child or a text-value is modified/added
 
-		if (tagText.matches(ATTRIBUTE_VALUE_MATCH_REGEXP)) {
-			Matcher matcher = ATTR_VALUE_SEARCH_TERM_PATTERN.matcher(tagText);
-			matcher.matches();
-			searchTerm = matcher.group("searchTerm"); //$NON-NLS-1$
-			matcher = ATTR_VALUE_ACKEY_PATTERN.matcher(tagText);
-			matcher.matches();
-			acKey = matcher.group("ackey"); //$NON-NLS-1$
-			return COMPLETION_TYPE_ATTRIBUTE_VALUE;
-		}
+				int searchTextStart;
+				List<Node> children = activeNode.getChildNodes();
+				if (!children.isEmpty()) {
+					OptionalInt nextSibling = IntStream.range(0, children.size())
+							.filter(i -> offset < children.get(i).getOffsetStart()).findFirst();
+					searchTextStart = children.get(nextSibling.orElse(children.size()) - 1).getOffsetEnd();
+				} else {
+					searchTextStart = activeNode.getOffsetStartTagEnd();
+				}
+				String searchTerm = text.substring(searchTextStart, offset).strip();
 
-		if (tagText.matches(TAG_VALUE_MATCH_REGEXP)) {
-			Matcher matcher = TAG_VALUE_SEARCH_TERM_PATTERN.matcher(tagText);
-			matcher.matches();
-			searchTerm = matcher.group("searchTerm"); //$NON-NLS-1$
-			matcher = TAG_VALUE_ACKEY_PATTERN.matcher(tagText);
-			matcher.matches();
-			acKey = matcher.group("ackey"); //$NON-NLS-1$
-			return COMPLETION_TYPE_TAG_VALUE;
-		}
+				if (searchTerm.startsWith("<")) {
+					return new TagCompletionProcessor(searchTerm.substring(1), activeNode, offset, null)
+							.getCompletionProposals();
+				} else {
+					return Stream.of( //
+							new TagCompletionProcessor(searchTerm, activeNode, offset, "<"),
+							new TagValueCompletionProcessor(searchTerm, activeNode.getNodeTag(), offset))
+							.map(DelegateProcessor::getCompletionProposals).flatMap(Arrays::stream)
+							.toArray(ICompletionProposal[]::new);
+				}
+			}
+			if (offset < activeNode.getOffsetStartTagEnd()) {
+				// Cursor is within the starting tag of the active node
+				// -> attributes are modified/added
+				Optional<Attribute> activeAttribute = activeNode.getAttributes().stream()
+						.filter(a -> a.startOffset() < offset && offset < a.endOffset()).findFirst();
+				// TODO: handle case where only parts of the attribute name are
+				// typed in. Then the AST is incomplete
+				// TODO: check what's the first 'token' before the offset that's
+				// not a word
+				if (activeAttribute.isPresent()) {
+					// cursor is within an attribute
 
-		return COMPLETION_TYPE_UNKNOWN;
+					int attributeStart = activeAttribute.get().startOffset();
+					int separator = text.indexOf(ATTRIBUTE_NAME_VALUE_SEPARATOR, attributeStart);
+					// TODO: check handling within whitespace?! Respectively
+					// ensure
+					// that the searchTerm drops all whitespace
+					if (offset < separator) {
+						String acKey = activeNode.getNodeTag();
+						String searchTerm = text.substring(attributeStart, offset);
+						return new AttributeNameCompletionProcessor(searchTerm, acKey, offset, text)
+								.getCompletionProposals();
+					} else if (separator < offset) {
+						String acKey = activeAttribute.get().name();
+						// remove leading and trailing whitespace and quote
+						String searchTerm = text.substring(separator + 1, offset).strip().substring(1);
+						return new AttributeValueCompletionProcessor(searchTerm, acKey, offset)
+								.getCompletionProposals();
+					}
+				}
+			}
+		}
+		return new ICompletionProposal[0];
+	}
+
+	private Node findNodeAt(Node node, int offset) {
+		if (node.getOffsetStart() < offset && offset < node.getOffsetEnd()) {
+			for (Node child : node.getChildNodes()) {
+				Node activeNode = findNodeAt(child, offset);
+				if (activeNode != null) {
+					return activeNode;
+				}
+			}
+			return node;
+		}
+		return null;
 	}
 
 	@Override

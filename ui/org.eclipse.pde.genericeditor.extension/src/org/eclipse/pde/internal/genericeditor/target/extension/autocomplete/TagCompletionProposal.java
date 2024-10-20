@@ -64,14 +64,14 @@ public class TagCompletionProposal extends TargetCompletionProposal {
 		}
 	}
 
-	public TagCompletionProposal(String tagType, int replacementOffset,
-			int replacementLength, StyledString displayString) {
-		super(getReplacementStringFromTagType(tagType),
-				getcursorPositionFromReplacementString(getReplacementStringFromTagType(tagType)), replacementOffset,
-				replacementLength, displayString);
+	public TagCompletionProposal(String tagType, int replacementOffset, int replacementLength,
+			StyledString displayString, String prefix) {
+		super(getReplacementStringFromTagType(tagType, prefix),
+				getcursorPositionFromReplacementString(getReplacementStringFromTagType(tagType, prefix)),
+				replacementOffset, replacementLength, displayString);
 	}
 
-	private static String getReplacementStringFromTagType(String tagType) {
+	private static String getReplacementStringFromTagType(String tagType, String prefix) {
 		String handyAddition;
 		String tagName = getTagNameFromTageType(tagType);
 
@@ -90,7 +90,7 @@ public class TagCompletionProposal extends TargetCompletionProposal {
 				tagName += " " + attribute.toString();
 			}
 		}
-		return tagName + handyAddition;
+		return (prefix != null ? prefix : "") + tagName + handyAddition;
 	}
 
 	private static String getTagNameFromTageType(String tagType) {

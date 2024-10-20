@@ -15,13 +15,10 @@
  *******************************************************************************/
 package org.eclipse.pde.internal.genericeditor.target.extension.model.xml;
 
-import java.io.ByteArrayInputStream;
 import java.util.Iterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.xml.stream.XMLEventReader;
-import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 
 import org.eclipse.jface.text.IDocument;
@@ -29,6 +26,7 @@ import org.eclipse.pde.internal.genericeditor.target.extension.model.DependencyN
 import org.eclipse.pde.internal.genericeditor.target.extension.model.ITargetConstants;
 import org.eclipse.pde.internal.genericeditor.target.extension.model.LocationNode;
 import org.eclipse.pde.internal.genericeditor.target.extension.model.Node;
+import org.eclipse.pde.internal.genericeditor.target.extension.model.RepositoryNode;
 import org.eclipse.pde.internal.genericeditor.target.extension.model.UnitNode;
 
 /**
@@ -40,23 +38,11 @@ public class Parser {
 
 	private Node target;
 
-	private XMLInputFactory inputFactory;
-
-	public Parser() {
-		initializeParser();
-	}
-
-	private void initializeParser() {
-		inputFactory = XMLInputFactory.newInstance();
-	}
-
 	public void parse(IDocument document) throws XMLStreamException {
 		target = null;
 		Node currentParent = null;
 		Node currentNode = null;
-		Iterator<XMLElement> tagReaderIterator = createXMLTagItterator(document.get());
-		while (tagReaderIterator.hasNext()) {
-			XMLElement event = tagReaderIterator.next();
+		for (XMLElement event : xmlTagsOf(document.get())) {
 			if (event.isStartElement()) {
 				String name = event.getName();
 				if (ITargetConstants.UNIT_TAG.equalsIgnoreCase(name)) {
@@ -75,7 +61,7 @@ public class Parser {
 				} else if (ITargetConstants.DEPENDENCY_TAG.equalsIgnoreCase(name)) {
 					currentNode = new DependencyNode();
 				} else if (ITargetConstants.REPOSITORY_TAG.equalsIgnoreCase(name)) {
-					currentNode = new Node();
+					currentNode = new RepositoryNode();
 					if (currentParent instanceof LocationNode containerLocation) {
 						String locationValue = event.getAttributeValueByKey(ITargetConstants.REPOSITORY_LOCATION_ATTR);
 						containerLocation.addRepositoryLocation(locationValue);
@@ -87,7 +73,10 @@ public class Parser {
 					currentNode = new Node();
 				}
 				currentNode.setNodeTag(name);
+				currentNode.addAttributes(event.getAttributes());
 				currentNode.setOffsetStart(event.getStartOffset());
+				currentNode.setOffsetStartTagEnd(event.getEndOffset());
+
 				if (currentParent != null) {
 					currentParent.addChildNode(currentNode);
 				}
@@ -96,30 +85,23 @@ public class Parser {
 
 			if (event.isEndElement()) {
 				if (currentNode != null) {
+					currentNode.setOffsetEndTagStart(event.getStartOffset());
 					currentNode.setOffsetEnd(event.getEndOffset());
 					currentNode = currentNode.getParentNode();
 					currentParent = currentNode;
 				}
 			}
 		}
-		ByteArrayInputStream inputStream = new ByteArrayInputStream(document.get().getBytes());
-		XMLEventReader eventReader = inputFactory.createXMLEventReader(inputStream);
-		while (eventReader.hasNext()) {
-			eventReader.nextEvent();
-		}
 	}
 
-	private Iterator<XMLElement> createXMLTagItterator(String document) {
-		return new Iterator<>() {
-			private final String tagRegex = "(?<tag><[\\w|/][^<]+?>)";
-			private final String commentRegex = "(<!--.*?-->)";
-			private final String beforeTagRegex = ".*?(?=".concat(tagRegex).concat(")");
+	private Iterable<XMLElement> xmlTagsOf(String document) {
+		return () -> new Iterator<>() {
+			private static final String TAG_REGEX = "(?<tag><[\\w|/][^<]+?>)";
+			private static final Pattern tagPattern = Pattern.compile(TAG_REGEX, Pattern.DOTALL);
+			private static final Pattern commentPattern = Pattern.compile("(<!--.*?-->)", Pattern.DOTALL);
+			private static final Pattern beforeTagPattern = Pattern.compile(".*?(?=" + TAG_REGEX + ")", Pattern.DOTALL);
 
 			private String text = document;
-
-			private final Pattern tagPattern = Pattern.compile(tagRegex, Pattern.DOTALL);
-			private final Pattern commentPattern = Pattern.compile(commentRegex, Pattern.DOTALL);
-			private final Pattern beforeTagPattern = Pattern.compile(beforeTagRegex, Pattern.DOTALL);
 
 			@Override
 			public boolean hasNext() {

@@ -15,9 +15,13 @@
 package org.eclipse.pde.internal.genericeditor.target.extension.model;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+
+import org.eclipse.pde.internal.genericeditor.target.extension.model.xml.XMLElement;
+import org.eclipse.pde.internal.genericeditor.target.extension.model.xml.XMLElement.Attribute;
 
 /**
  * Base class for model nodes in a target definition.
@@ -26,8 +30,11 @@ public class Node {
 
 	private int offsetStart;
 	private int offsetEnd;
+	private int offsetStartTagEnd;
+	private int offsetEndTagStart;
 	private String nodeTag;
 	private List<Node> childNodes;
+	private List<XMLElement.Attribute> attributes;
 	private Node parentNode;
 
 	public int getOffsetStart() {
@@ -46,6 +53,22 @@ public class Node {
 		this.offsetEnd = offsetEnd;
 	}
 
+	public int getOffsetStartTagEnd() {
+		return offsetStartTagEnd;
+	}
+
+	public void setOffsetStartTagEnd(int offsetStartTagEnd) {
+		this.offsetStartTagEnd = offsetStartTagEnd;
+	}
+
+	public int getOffsetEndTagStart() {
+		return offsetEndTagStart;
+	}
+
+	public void setOffsetEndTagStart(int offsetEndTagStart) {
+		this.offsetEndTagStart = offsetEndTagStart;
+	}
+
 	public String getNodeTag() {
 		return nodeTag;
 	}
@@ -54,9 +77,21 @@ public class Node {
 		this.nodeTag = nodeTag;
 	}
 
+	public List<XMLElement.Attribute> getAttributes() {
+		List<Attribute> attrs = attributes;
+		return attrs == null ? List.of() : attrs;
+	}
+
+	public void addAttributes(Collection<XMLElement.Attribute> attribute) {
+		if (attributes == null) {
+			attributes = new ArrayList<>();
+		}
+		attributes.addAll(attribute);
+	}
+
 	public List<Node> getChildNodes() {
 		List<Node> nodes = childNodes;
-		return nodes == null ? new ArrayList<>() : nodes;
+		return nodes == null ? List.of() : nodes;
 	}
 
 	public List<Node> getChildNodesByTag(String nodeTag) {
