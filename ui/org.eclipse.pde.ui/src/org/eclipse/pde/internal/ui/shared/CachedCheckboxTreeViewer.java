@@ -21,6 +21,7 @@ import java.util.Set;
 import org.eclipse.jface.viewers.CheckboxTreeViewer;
 import org.eclipse.jface.viewers.ITreeContentProvider;
 import org.eclipse.swt.widgets.Tree;
+import org.eclipse.swt.widgets.TreeItem;
 import org.eclipse.ui.dialogs.ContainerCheckedTreeViewer;
 
 /**
@@ -185,7 +186,10 @@ public class CachedCheckboxTreeViewer extends ContainerCheckedTreeViewer {
 
 	@Override
 	public void setAllChecked(boolean state) {
-		super.setAllChecked(state);
+		TreeItem[] list = getTree().getItems();
+		for (TreeItem item : list) {
+			super.setSubtreeChecked(item, state);
+		}
 		if (state) {
 
 			// Find all visible children, add only the visible leaf nodes to the check state cache

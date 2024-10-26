@@ -26,7 +26,7 @@ import org.eclipse.ui.progress.WorkbenchJob;
 public class RootElementsFilteredTree extends FilteredTree {
 
 	public RootElementsFilteredTree(Composite parent, int treeStyle) {
-		super(parent, treeStyle, new RootElementsPatternFilter(), true);
+		super(parent, treeStyle, new RootElementsPatternFilter(), true, false);
 	}
 
 	/**

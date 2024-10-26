@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2000, 2015 IBM Corporation and others.
+ *  Copyright (c) 2000, 2024 IBM Corporation and others.
  *
  *  This program and the accompanying materials
  *  are made available under the terms of the Eclipse Public License 2.0
@@ -15,7 +15,7 @@ package org.eclipse.pde.internal.ui.util;
 
 import org.eclipse.jface.resource.CompositeImageDescriptor;
 import org.eclipse.jface.resource.ImageDescriptor;
-import org.eclipse.swt.graphics.ImageData;
+import org.eclipse.swt.graphics.ImageDataProvider;
 import org.eclipse.swt.graphics.Point;
 
 /**
@@ -43,15 +43,16 @@ public abstract class AbstractOverlayIcon extends CompositeImageDescriptor {
 	}
 
 	protected void drawBottomLeft(ImageDescriptor[] overlays) {
-		if (overlays == null)
+		if (overlays == null) {
 			return;
+		}
 		int length = overlays.length;
 		int x = 0;
 		for (int i = 0; i < 3; i++) {
 			if (i < length && overlays[i] != null) {
-				ImageData id = overlays[i].getImageData();
-				drawImage(id, x, getSize().y - id.height);
-				x += id.width;
+				CachedImageDataProvider id = createCachedImageDataProvider(overlays[i]);
+				drawImage(id, x, getSize().y - id.getHeight());
+				x += id.getWidth();
 			}
 		}
 	}
@@ -63,18 +64,18 @@ public abstract class AbstractOverlayIcon extends CompositeImageDescriptor {
 		int x = getSize().x;
 		for (int i = 2; i >= 0; i--) {
 			if (i < length && overlays[i] != null) {
-				ImageData id = overlays[i].getImageData();
-				x -= id.width;
-				drawImage(id, x, getSize().y - id.height);
+				CachedImageDataProvider id = createCachedImageDataProvider(overlays[i]);
+				x -= id.getWidth();
+				drawImage(id, x, getSize().y - id.getHeight());
 			}
 		}
 	}
 
-	protected abstract ImageData getBaseImageData();
+	protected abstract ImageDataProvider getBaseImageData();
 
 	@Override
 	protected void drawCompositeImage(int width, int height) {
-		ImageData base = getBaseImageData();
+		ImageDataProvider base = getBaseImageData();
 		drawImage(base, 0, 0);
 		if (fOverlays != null) {
 			if (fOverlays.length > 0)
@@ -98,9 +99,9 @@ public abstract class AbstractOverlayIcon extends CompositeImageDescriptor {
 		int x = 0;
 		for (int i = 0; i < 3; i++) {
 			if (i < length && overlays[i] != null) {
-				ImageData id = overlays[i].getImageData();
+				CachedImageDataProvider id = createCachedImageDataProvider(overlays[i]);
 				drawImage(id, x, 0);
-				x += id.width;
+				x += id.getWidth();
 			}
 		}
 	}
@@ -112,8 +113,8 @@ public abstract class AbstractOverlayIcon extends CompositeImageDescriptor {
 		int x = getSize().x;
 		for (int i = 2; i >= 0; i--) {
 			if (i < length && overlays[i] != null) {
-				ImageData id = overlays[i].getImageData();
-				x -= id.width;
+				CachedImageDataProvider id = createCachedImageDataProvider(overlays[i]);
+				x -= id.getWidth();
 				drawImage(id, x, 0);
 			}
 		}

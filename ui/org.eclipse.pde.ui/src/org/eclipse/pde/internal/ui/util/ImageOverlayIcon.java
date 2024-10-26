@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2000, 2015 IBM Corporation and others.
+ *  Copyright (c) 2000, 2024 IBM Corporation and others.
  *
  *  This program and the accompanying materials
  *  are made available under the terms of the Eclipse Public License 2.0
@@ -15,7 +15,7 @@ package org.eclipse.pde.internal.ui.util;
 
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.graphics.ImageData;
+import org.eclipse.swt.graphics.ImageDataProvider;
 import org.eclipse.swt.graphics.Point;
 
 /**
@@ -34,7 +34,7 @@ public class ImageOverlayIcon extends AbstractOverlayIcon {
 	}
 
 	@Override
-	protected ImageData getBaseImageData() {
-		return base.getImageData();
+	protected ImageDataProvider getBaseImageData() {
+		return createCachedImageDataProvider(base);
 	}
 }

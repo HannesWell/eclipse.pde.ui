@@ -290,7 +290,8 @@ public class StateViewPage extends Page implements IStateDeltaListener, IPluginM
 		fComposite.setLayout(layout);
 		fComposite.setLayoutData(new GridData(GridData.FILL_BOTH));
 
-		fFilteredTree = new FilteredTree(fComposite, SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.SINGLE, new PatternFilter(), true) {
+		fFilteredTree = new FilteredTree(fComposite, SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL | SWT.SINGLE,
+				new PatternFilter(), true, false) {
 			@Override
 			protected void createControl(Composite parent, int treeStyle) {
 				super.createControl(parent, treeStyle);

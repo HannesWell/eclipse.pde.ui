@@ -35,7 +35,7 @@ public class FormFilteredTree extends FilteredTree {
 	private FormEntry fEntryFilter;
 
 	public FormFilteredTree(Composite parent, int treeStyle, PatternFilter filter) {
-		super(parent, treeStyle, filter, true);
+		super(parent, treeStyle, filter, true, false);
 	}
 
 	@Override
